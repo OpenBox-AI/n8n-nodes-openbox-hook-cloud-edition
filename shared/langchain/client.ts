@@ -1,0 +1,142 @@
+/**
+ * GovernanceClient — TypeScript port of openbox_langgraph/client.py.
+ *
+ * The Python SDK constructs its own httpx session; here we delegate to
+ * openboxRequest() so requests are visible in n8n's execution UI and the
+ * credential's signed headers are applied automatically.
+ */
+
+import { IExecuteFunctions } from 'n8n-workflow';
+
+import { isTransientGovernanceError, openboxRequest } from '../openbox-client';
+import { GovernanceVerdictResponse, LangChainGovernanceEvent } from './types';
+import { toNodeError } from './verdict';
+
+export type OnApiError = 'fail_open' | 'fail_closed';
+
+/**
+ * Mirrors openbox_langgraph.types.to_server_event_type().
+ *
+ * The OpenBox Core API only accepts the Temporal SDK's canonical event
+ * types (ActivityStarted, ActivityCompleted, WorkflowStarted, …).
+ * LangChain-specific names (LLMStarted, ToolStarted, …) are SDK-internal
+ * and must be translated before the request hits the wire.
+ * The original name is preserved in `metadata.sdk_event_type` so the
+ * dashboard can still distinguish LLM spans from generic activity spans.
+ */
+function toServerEventType(event: LangChainGovernanceEvent): LangChainGovernanceEvent {
+  const SDK_TO_SERVER: Record<string, string> = {
+    LLMStarted: 'ActivityStarted',
+    LLMCompleted: 'ActivityCompleted',
+    ToolStarted: 'ActivityStarted',
+    ToolCompleted: 'ActivityCompleted',
+  };
+
+  const serverType = SDK_TO_SERVER[event.event_type];
+  if (!serverType) return event;
+
+  return {
+    ...event,
+    event_type: serverType,
+    // Preserve the SDK-level name so Core can group/tag accordingly.
+    metadata: {
+      ...(event.metadata as Record<string, unknown> | undefined ?? {}),
+      sdk_event_type: event.event_type,
+    },
+  };
+}
+
+export interface ApprovalPollResponse {
+  id?: string;
+  arm?: string;
+  verdict?: string;
+  action?: string;
+  reason?: string;
+  approval_expiration_time?: string;
+  approvalExpirationTime?: string;
+  expired?: boolean;
+  [key: string]: unknown;
+}
+
+export class GovernanceClient {
+  private traceId: string;
+  private readonly timeoutMs?: number;
+  readonly executeFunctions: IExecuteFunctions;
+
+  constructor(executeFunctions: IExecuteFunctions, traceId: string, timeoutMs?: number) {
+    this.executeFunctions = executeFunctions;
+    this.traceId = traceId;
+    this.timeoutMs = timeoutMs;
+  }
+
+  updateTraceId(traceId: string): void {
+    this.traceId = traceId;
+  }
+
+  /**
+   * evaluate_event() — POST a governance event and return the verdict.
+   * Returns null on soft (network/other) failures when onApiError is
+   * "fail_open" (the default) so callers can continue without governance
+   * rather than crashing the workflow. When "fail_closed", the failure is
+   * rethrown instead of silently degrading to ungoverned. Auth/signing
+   * failures (401/403) are never transient and always propagate regardless
+   * of this setting.
+   */
+  async evaluateEvent(
+    event: LangChainGovernanceEvent,
+    onApiError: OnApiError = 'fail_open',
+  ): Promise<GovernanceVerdictResponse | null> {
+    try {
+      return await openboxRequest<GovernanceVerdictResponse>(this.executeFunctions, {
+        method: 'POST',
+        path: '/api/v1/governance/evaluate',
+        body: toServerEventType(event) as Record<string, unknown>,
+        traceId: this.traceId,
+        timeoutMs: this.timeoutMs,
+      });
+    } catch (err) {
+      if (isTransientGovernanceError(err) && onApiError !== 'fail_closed') return null;
+      throw toNodeError(this.executeFunctions.getNode(), err);
+    }
+  }
+
+  /**
+   * poll_approval() — POST HITL poll payload to Core.
+   * Mirrors openbox_langgraph.client.GovernanceClient.poll_approval().
+   */
+  async pollApproval(
+    workflowId: string,
+    runId: string,
+    activityId: string,
+    approvalId?: string,
+    onApiError: OnApiError = 'fail_open',
+  ): Promise<ApprovalPollResponse | null> {
+    // If Core returned an approval_id in the evaluate response, use it as the
+    // poll key (mirrors Python SDK's exc.action_id pattern). Otherwise fall
+    // back to the triple (workflow_id, run_id, activity_id).
+    const pollKey = approvalId ?? activityId;
+    const reqBody = approvalId
+      ? { workflow_id: pollKey, run_id: pollKey, activity_id: pollKey }
+      : { workflow_id: workflowId, run_id: runId, activity_id: activityId };
+    try {
+      const data = await openboxRequest<ApprovalPollResponse>(this.executeFunctions, {
+        method: 'POST',
+        path: '/api/v1/governance/approval',
+        body: reqBody,
+        traceId: this.traceId,
+        timeoutMs: this.timeoutMs,
+      });
+      const expiration = data.approval_expiration_time ?? data.approvalExpirationTime;
+      if (typeof expiration === 'string' && expiration.trim()) {
+        const expiresAt = Date.parse(expiration);
+        if (!Number.isNaN(expiresAt) && expiresAt < Date.now()) {
+          return { ...data, expired: true };
+        }
+      }
+      return data;
+    } catch (err) {
+      if (isTransientGovernanceError(err) && onApiError !== 'fail_closed') return null;
+      throw toNodeError(this.executeFunctions.getNode(), err);
+    }
+  }
+}

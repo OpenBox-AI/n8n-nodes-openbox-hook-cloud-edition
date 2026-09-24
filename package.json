@@ -1,0 +1,66 @@
+{
+  "name": "n8n-nodes-openbox-hook",
+  "version": "0.5.0",
+  "description": "OpenBox for n8n — Cloud Edition. Governance for n8n AI agents.",
+  "license": "MIT",
+  "author": {
+    "name": "OpenBox AI",
+    "email": "devops@openbox.ai"
+  },
+  "homepage": "https://github.com/OpenBox-AI/openbox-n8n-sdk/tree/main/custom-node#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenBox-AI/openbox-n8n-sdk.git",
+    "directory": "custom-node"
+  },
+  "bugs": {
+    "url": "https://github.com/OpenBox-AI/openbox-n8n-sdk/issues"
+  },
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "openbox",
+    "governance",
+    "ai-agents",
+    "guardrails",
+    "langchain"
+  ],
+  "main": "dist/nodes/OpenBoxAgent/OpenBoxAgent.node.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "clean": "node scripts/clean-dist.js",
+    "prebuild": "npm run clean",
+    "build": "tsc -p tsconfig.json && node scripts/copy-assets.js",
+    "prepack": "npm run build",
+    "dev": "tsc -p tsconfig.json --watch",
+    "lint": "n8n-node lint",
+    "lint:fix": "n8n-node lint --fix",
+    "release": "npm version",
+    "smoke:load": "node -e \"require('./dist/nodes/OpenBoxAgent/OpenBoxAgent.node.js'); console.log('node-load-ok')\"",
+    "test": "vitest run",
+    "test:watch": "vitest watch"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  },
+  "devDependencies": {
+    "@n8n/node-cli": "^0.49.1",
+    "@types/node": "^20.19.41",
+    "n8n-workflow": "2.31.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.2"
+  },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/OpenBoxApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/OpenBoxAgent/OpenBoxAgent.node.js"
+    ],
+    "strict": true
+  }
+}
