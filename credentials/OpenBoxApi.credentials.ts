@@ -1,7 +1,6 @@
 import {
   IAuthenticate,
   ICredentialDataDecryptedObject,
-  ICredentialTestRequest,
   ICredentialType,
   IHttpRequestOptions,
   INodeProperties,
@@ -66,13 +65,9 @@ export class OpenBoxApi implements ICredentialType {
     },
   ];
 
-  test: ICredentialTestRequest = {
-    request: {
-      baseURL: '={{$credentials.openboxUrl || "' + DEFAULT_OPENBOX_URL + '"}}',
-      url: '/api/v1/auth/validate',
-      method: 'GET',
-    },
-  };
+  // No declarative `test`: n8n prefers it over the node's testedBy function,
+  // and a declarative request cannot run the workload token exchange. The
+  // OpenBox Agent node's openBoxApiCredentialTest covers every identity method.
 
   authenticate: IAuthenticate = async (
     credentials: ICredentialDataDecryptedObject,

@@ -35,14 +35,8 @@ describe('OpenBoxApi credential descriptor', () => {
     expect(apiKeyProp?.typeOptions).toMatchObject({ password: true });
   });
 
-  it('points the connection test at /api/v1/auth/validate', () => {
-    expect(cred.test.request.url).toBe('/api/v1/auth/validate');
-    expect(cred.test.request.method).toBe('GET');
-  });
-
-  it('defaults the base URL to core.openbox.ai but allows overriding it via the credential field', () => {
-    expect(cred.test.request.baseURL).toContain('https://core.openbox.ai');
-    expect(cred.test.request.baseURL).toContain('$credentials.openboxUrl');
+  it('has no declarative test, so n8n uses the node test that supports workload identity', () => {
+    expect((cred as { test?: unknown }).test).toBeUndefined();
   });
 });
 

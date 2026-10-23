@@ -3,6 +3,7 @@ import { NodeApiError } from 'n8n-workflow';
 import { describe, expect, it, vi } from 'vitest';
 
 import { normalizeOpenBoxCredentials } from '../credentials/OpenBoxApi.credentials';
+import { testOpenBoxCredential } from '../shared/credential-test';
 import { GovernanceClient } from '../shared/langchain/client';
 import { isGovernanceAuthError, isTransientGovernanceError, isWorkloadAuthError } from '../shared/openbox-client';
 import {
@@ -211,5 +212,49 @@ describe('GovernanceClient on IAM v3', () => {
     const { ctx, calls } = makeCtx({ credentials: { apiKey: 'obx_test', openboxUrl: CORE } });
     await new GovernanceClient(ctx as never, 't').evaluateEvent(event);
     expect(calls.map((c) => c.url)).toEqual([`${CORE}/api/v1/governance/evaluate`]);
+  });
+});
+
+describe('credential test (n8n provides only helpers.request here)', () => {
+  type LegacyReq = { method: string; uri: string; headers?: Record<string, string>; resolveWithFullResponse?: boolean; simple?: boolean; followRedirect?: boolean };
+
+  function legacyCtx(validate: () => unknown) {
+    const calls: LegacyReq[] = [];
+    const request = vi.fn(async (req: LegacyReq) => {
+      calls.push(req);
+      if (req.uri === `${CORE}/api/v3/auth/bootstrap`) return { statusCode: 200, body: JSON.stringify(bootstrapDoc) };
+      if (req.uri === GRANT_URL) {
+        return { statusCode: 200, body: JSON.stringify({ ['access_' + 'token']: 'wl-t', token_type: 'Bearer', expires_in: 300 }) };
+      }
+      return validate();
+    });
+    return { calls, ctx: { helpers: { request } } };
+  }
+
+  it('passes a workload credential through bootstrap, token exchange and v3 validate', async () => {
+    const { ctx, calls } = legacyCtx(() => ({ valid: true }));
+    const result = await testOpenBoxCredential.call(ctx as never, {
+      data: { apiKey: 'obx_live_k', openboxUrl: CORE, workloadPrivateKey: PEM },
+    } as never);
+    expect(result).toEqual({ status: 'OK', message: 'Connection successful' });
+    const validate = calls.find((c) => c.uri.endsWith('/auth/validate'))!;
+    expect(validate.uri).toBe(`${CORE}/api/v3/auth/validate`);
+    expect(validate.headers?.['X-OpenBox-Workload-Token']).toBe('wl-t');
+    expect(calls.every((c) => c.followRedirect === false)).toBe(true);
+  });
+
+  it('keeps API-key-only credentials on v1 validate', async () => {
+    const { ctx, calls } = legacyCtx(() => ({ valid: true }));
+    const result = await testOpenBoxCredential.call(ctx as never, { data: { apiKey: 'obx_test', openboxUrl: CORE } } as never);
+    expect(result.status).toBe('OK');
+    expect(calls.map((c) => c.uri)).toEqual([`${CORE}/api/v1/auth/validate`]);
+  });
+
+  it('reports a Core rejection as an error', async () => {
+    const { ctx } = legacyCtx(() => { throw httpFailure(401); });
+    const result = await testOpenBoxCredential.call(ctx as never, {
+      data: { apiKey: 'obx_live_k', openboxUrl: CORE, workloadPrivateKey: PEM },
+    } as never);
+    expect(result.status).toBe('Error');
   });
 });

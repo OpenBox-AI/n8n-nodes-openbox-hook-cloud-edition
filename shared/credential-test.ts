@@ -11,6 +11,26 @@ import { buildSignedHeaders } from './signing';
 import { WORKLOAD_TOKEN_HEADER, acquireWorkloadAuth } from './workload-auth';
 
 /**
+ * n8n gives credential tests only the legacy `helpers.request`
+ * (ICredentialTestFunctions), not `httpRequest`. Translate the options this
+ * file and workload-auth use; redirects stay off when asked.
+ */
+function httpRequestVia(ctx: ICredentialTestFunctions): (options: IHttpRequestOptions) => Promise<unknown> {
+  return async (options) =>
+    await ctx.helpers.request({
+      method: options.method ?? 'GET',
+      uri: options.url,
+      headers: options.headers,
+      body: options.body,
+      json: options.json ?? false,
+      timeout: options.timeout,
+      resolveWithFullResponse: options.returnFullResponse ?? false,
+      simple: !options.ignoreHttpStatusErrors,
+      followRedirect: !options.disableFollowRedirect,
+    });
+}
+
+/**
  * Shared implementation for testing an OpenBox credential. Call this from every
  * node's `methods.credentialTest.openBoxApiCredentialTest` method so the logic
  * stays in one place.
@@ -27,11 +47,7 @@ export async function testOpenBoxCredential(
   }
 
   const path = CORE_ROUTES[contractVersionFor(creds)].validate;
-  // n8n-workflow's types don't declare httpRequest on ICredentialTestFunctions,
-  // but the runtime exposes it (the linter rule explicitly requires it).
-  const helpers = this.helpers as unknown as {
-    httpRequest(options: IHttpRequestOptions): Promise<unknown>;
-  };
+  const httpRequest = httpRequestVia(this);
 
   try {
     let headers;
@@ -39,7 +55,7 @@ export async function testOpenBoxCredential(
       headers = buildSignedHeaders('GET', path, Buffer.alloc(0), creds.apiKey);
       // A one-off test, so the token is acquired fresh and never cached.
       const auth = await acquireWorkloadAuth({
-        http: (opts) => helpers.httpRequest(opts),
+        http: httpRequest,
         openboxUrl: creds.openboxUrl,
         coreHeaders: { ...headers },
         privateKeyPem: creds.workloadPrivateKey,
@@ -55,7 +71,7 @@ export async function testOpenBoxCredential(
         creds.agentPrivateKey,
       );
     }
-    const response = await helpers.httpRequest({
+    const response = await httpRequest({
       method: 'GET',
       url: `${creds.openboxUrl}${path}`,
       headers,
