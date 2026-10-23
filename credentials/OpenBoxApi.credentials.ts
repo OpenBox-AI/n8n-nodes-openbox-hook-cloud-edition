@@ -54,6 +54,16 @@ export class OpenBoxApi implements ICredentialType {
       description:
         'Optional. Base64-encoded raw 32-byte Ed25519 seed. Every request is signed locally with this key. Required for agents with signing_required=true. Pair with Agent DID.',
     },
+    {
+      displayName: 'Workload Private Key',
+      name: 'workloadPrivateKey',
+      type: 'string',
+      typeOptions: { password: true },
+      default: '',
+      description:
+        'Optional. PKCS8 PEM RSA private key of the agent\'s Keycloak workload identity (IAM v3). When set, every request goes to /api/v3 with a short-lived workload token. Leave Agent DID and Agent Private Key empty.',
+      placeholder: '-----BEGIN PRIVATE KEY----- ... -----END PRIVATE KEY-----',
+    },
   ];
 
   test: ICredentialTestRequest = {
@@ -99,6 +109,8 @@ export interface OpenBoxCredentials {
   apiKey: string;
   agentDid?: string;
   agentPrivateKey?: string;
+  /** PKCS8 PEM RSA key; selects IAM v3 workload authentication. */
+  workloadPrivateKey?: string;
 }
 
 export function normalizeOpenBoxCredentials(
@@ -111,10 +123,22 @@ export function normalizeOpenBoxCredentials(
 
   const rawUrl = raw.openboxUrl ? String(raw.openboxUrl).trim().replace(/\/+$/, '') : '';
 
+  const agentDid = raw.agentDid ? String(raw.agentDid) : undefined;
+  const agentPrivateKey = raw.agentPrivateKey ? String(raw.agentPrivateKey) : undefined;
+  const workloadPrivateKey = String(raw.workloadPrivateKey ?? '').trim() || undefined;
+  // A workload key fixes the credential to IAM v3; mixing it with DID signing
+  // would leave it ambiguous which identity Core should verify.
+  if (workloadPrivateKey && (agentDid || agentPrivateKey)) {
+    throw new Error(
+      'OpenBox credential sets both a Workload Private Key and Agent DID signing. Use one identity method: clear Agent DID and Agent Private Key for a workload-identity agent.',
+    );
+  }
+
   return {
     openboxUrl: rawUrl || DEFAULT_OPENBOX_URL,
     apiKey,
-    agentDid: raw.agentDid ? String(raw.agentDid) : undefined,
-    agentPrivateKey: raw.agentPrivateKey ? String(raw.agentPrivateKey) : undefined,
+    agentDid,
+    agentPrivateKey,
+    workloadPrivateKey,
   };
 }

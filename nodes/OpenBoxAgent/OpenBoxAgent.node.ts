@@ -37,7 +37,7 @@ import {
 } from 'n8n-workflow';
 
 import { testOpenBoxCredential } from '../../shared/credential-test';
-import { isGovernanceAuthError } from '../../shared/openbox-client';
+import { isGovernanceAuthError, isWorkloadAuthError } from '../../shared/openbox-client';
 import {
   GovernanceBlockedError,
   GovernanceHaltError,
@@ -1011,10 +1011,17 @@ function mapGovernanceError(
   ctx: IExecuteFunctions,
   itemIndex: number,
 ): void {
+  if (isWorkloadAuthError(err)) {
+    throw new NodeOperationError(
+      ctx.getNode(),
+      'OpenBox workload authentication failed — no governed request was sent.',
+      { itemIndex, description: err.message },
+    );
+  }
   if (isGovernanceAuthError(err)) {
     throw new NodeOperationError(
       ctx.getNode(),
-      'OpenBox credential rejected by Core (401/403) — check the API key, Agent DID, and Agent Private Key.',
+      'OpenBox credential rejected by Core (401/403) — check the API key, and the Agent DID and Agent Private Key or the Workload Private Key.',
       { itemIndex, description: err.message },
     );
   }

@@ -25,6 +25,11 @@ describe('OpenBoxApi credential descriptor', () => {
     expect(names).not.toContain('environment');
   });
 
+  it('offers a Workload Private Key password field for IAM v3 agents', () => {
+    const prop = cred.properties.find((p) => p.name === 'workloadPrivateKey');
+    expect(prop?.typeOptions).toMatchObject({ password: true });
+  });
+
   it('marks the API key as a password field', () => {
     const apiKeyProp = cred.properties.find((p) => p.name === 'apiKey');
     expect(apiKeyProp?.typeOptions).toMatchObject({ password: true });

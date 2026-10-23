@@ -73,6 +73,7 @@ Create an **OpenBox API** credential in n8n with:
 | **API Key** | Yes | Your OpenBox API key. Live keys start with `obx_live_`; test keys with `obx_test_`. |
 | **Agent DID** | No | Agent decentralised identifier (`did:aip:<uuid>`). Required only for agents with `signing_required = true`. |
 | **Agent Private Key** | No | Base64-encoded raw 32-byte Ed25519 seed. Paired with Agent DID for signed requests. |
+| **Workload Private Key** | No | PKCS8 PEM RSA private key of the agent's Keycloak workload identity. Set it for agents that use workload identity (IAM v3); leave Agent DID and Agent Private Key empty. |
 
 Get your API key from [dashboard.openbox.ai](https://dashboard.openbox.ai).
 
@@ -143,6 +144,26 @@ are chosen so the node is useful without configuration.
 For agents configured with `signing_required = true` in OpenBox, fill in the
 **Agent DID** and **Agent Private Key** fields in the credential. Every request
 to the OpenBox API will be signed with an Ed25519 signature automatically.
+
+### Workload identity (IAM v3)
+
+Agents created in an organization with an active identity provider use Keycloak
+workload identity. Paste the agent's RSA private key (PKCS8 PEM) into
+**Workload Private Key**; a key pasted on one line is accepted. The node then:
+
+- fetches the agent's workload settings from OpenBox Core
+  (`GET /api/v3/auth/bootstrap`), signs a one-minute RS256 client assertion with
+  the key, and exchanges it at Keycloak for an access token;
+- sends every governance request to `/api/v3/*` with the API key plus that
+  token in `X-OpenBox-Workload-Token`, and never follows a redirect;
+- keeps the token for one execution only, at most five minutes, and discards
+  it as soon as Core rejects it.
+
+The key never leaves n8n; only the signed assertion goes to Keycloak, and the
+API key never does. Getting a token is never treated as an outage: if it
+fails, the run stops with *OpenBox workload authentication failed* even under
+*Fail Open*, and no governed request is sent. A 4xx from a v3 route (other than
+401, 403, 408 and 429) also stops the run rather than failing open.
 
 ## Limitations and known issues
 

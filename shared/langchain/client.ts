@@ -89,7 +89,7 @@ export class GovernanceClient {
     try {
       return await openboxRequest<GovernanceVerdictResponse>(this.executeFunctions, {
         method: 'POST',
-        path: '/api/v1/governance/evaluate',
+        route: 'evaluate',
         body: toServerEventType(event) as Record<string, unknown>,
         traceId: this.traceId,
         timeoutMs: this.timeoutMs,
@@ -121,7 +121,7 @@ export class GovernanceClient {
     try {
       const data = await openboxRequest<ApprovalPollResponse>(this.executeFunctions, {
         method: 'POST',
-        path: '/api/v1/governance/approval',
+        route: 'approval',
         body: reqBody,
         traceId: this.traceId,
         timeoutMs: this.timeoutMs,

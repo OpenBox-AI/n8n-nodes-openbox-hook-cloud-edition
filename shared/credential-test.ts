@@ -6,7 +6,9 @@ import type {
 } from 'n8n-workflow';
 
 import { normalizeOpenBoxCredentials } from '../credentials/OpenBoxApi.credentials';
+import { CORE_ROUTES, contractVersionFor } from './openbox-client';
 import { buildSignedHeaders } from './signing';
+import { WORKLOAD_TOKEN_HEADER, acquireWorkloadAuth } from './workload-auth';
 
 /**
  * Shared implementation for testing an OpenBox credential. Call this from every
@@ -24,27 +26,41 @@ export async function testOpenBoxCredential(
     return { status: 'Error', message: (err as Error).message };
   }
 
-  const path = '/api/v1/auth/validate';
-  const headers = buildSignedHeaders(
-    'GET',
-    path,
-    Buffer.alloc(0),
-    creds.apiKey,
-    creds.agentDid,
-    creds.agentPrivateKey,
-  );
+  const path = CORE_ROUTES[contractVersionFor(creds)].validate;
+  // n8n-workflow's types don't declare httpRequest on ICredentialTestFunctions,
+  // but the runtime exposes it (the linter rule explicitly requires it).
+  const helpers = this.helpers as unknown as {
+    httpRequest(options: IHttpRequestOptions): Promise<unknown>;
+  };
 
   try {
-    // n8n-workflow's types don't declare httpRequest on ICredentialTestFunctions,
-    // but the runtime exposes it (the linter rule explicitly requires it).
-    const helpers = this.helpers as unknown as {
-      httpRequest(options: IHttpRequestOptions): Promise<unknown>;
-    };
+    let headers;
+    if (creds.workloadPrivateKey) {
+      headers = buildSignedHeaders('GET', path, Buffer.alloc(0), creds.apiKey);
+      // A one-off test, so the token is acquired fresh and never cached.
+      const auth = await acquireWorkloadAuth({
+        http: (opts) => helpers.httpRequest(opts),
+        openboxUrl: creds.openboxUrl,
+        coreHeaders: { ...headers },
+        privateKeyPem: creds.workloadPrivateKey,
+      });
+      headers[WORKLOAD_TOKEN_HEADER] = auth.accessToken;
+    } else {
+      headers = buildSignedHeaders(
+        'GET',
+        path,
+        Buffer.alloc(0),
+        creds.apiKey,
+        creds.agentDid,
+        creds.agentPrivateKey,
+      );
+    }
     const response = await helpers.httpRequest({
       method: 'GET',
       url: `${creds.openboxUrl}${path}`,
       headers,
       json: true,
+      ...(creds.workloadPrivateKey ? { disableFollowRedirect: true } : {}),
     });
     // Best-effort response-shape check — Core's exact schema for this endpoint
     // isn't documented, so only an explicit `valid: false` is treated as a
