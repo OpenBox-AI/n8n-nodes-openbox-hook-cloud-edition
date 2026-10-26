@@ -1,0 +1,74 @@
+name: PR Quality
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  NODE_VERSION: "24"
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - edited
+      - ready_for_review
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-quality-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke test (node load)
+        run: npm run smoke:load
+
+      - name: Run tests
+        run: npm run test
+
+      - name: Verify pack contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_output=$(npm pack --dry-run 2>&1)
+          echo "$pack_output"
+          if ! echo "$pack_output" | grep -q "dist/"; then
+            echo "ERROR: dist/ not found in pack output — run 'npm run build' first"
+            exit 1
+          fi
+          echo "Pack contents look correct."

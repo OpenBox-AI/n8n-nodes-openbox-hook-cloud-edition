@@ -7,14 +7,13 @@
     "name": "OpenBox AI",
     "email": "devops@openbox.ai"
   },
-  "homepage": "https://github.com/OpenBox-AI/openbox-n8n-sdk/tree/main/custom-node#readme",
+  "homepage": "https://github.com/OpenBox-AI/n8n-nodes-openbox-hook-cloud-edition#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/OpenBox-AI/openbox-n8n-sdk.git",
-    "directory": "custom-node"
+    "url": "git+https://github.com/OpenBox-AI/n8n-nodes-openbox-hook-cloud-edition.git"
   },
   "bugs": {
-    "url": "https://github.com/OpenBox-AI/openbox-n8n-sdk/issues"
+    "url": "https://github.com/OpenBox-AI/n8n-nodes-openbox-hook-cloud-edition/issues"
   },
   "keywords": [
     "n8n-community-node-package",

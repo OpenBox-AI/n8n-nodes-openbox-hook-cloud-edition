@@ -190,7 +190,7 @@ canvas starts reporting under a new agent name, which splits your history.
 ## Package layout
 
 ```text
-custom-node/
+n8n-nodes-openbox-hook/
   nodes/OpenBoxAgent/
     OpenBoxAgent.node.ts        the OpenBox: Agent node
     openbox.svg, openbox.dark.svg   node icon (light / dark)
@@ -228,4 +228,4 @@ To verify the package scan passes once published:
 npx @n8n/scan-community-package n8n-nodes-openbox-hook
 ```
 
-Release process is documented in [RELEASING.md](../RELEASING.md).
+Release process is documented in [RELEASING.md](RELEASING.md).
