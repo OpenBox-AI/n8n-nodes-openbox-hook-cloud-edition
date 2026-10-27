@@ -24,7 +24,7 @@ its own node: other workflows on the same instance are unaffected.
 - [Node settings](#node-settings)
 - [Signed and workload-identity agents](#signed-and-workload-identity-agents)
 - [Limitations](#limitations)
-- [Cloud Edition vs Full Edition](#cloud-edition-vs-full-edition)
+- [What makes it the Cloud Edition](#what-makes-it-the-cloud-edition)
 - [Development](#development)
 
 ## Install
@@ -206,34 +206,33 @@ reports under a new agent.
 To test a queue-mode worker, run n8n in queue mode and trigger the workflow
 (a schedule trigger is simplest).
 
-## Cloud Edition vs Full Edition
+## What makes it the Cloud Edition
 
-This package has two lines. The **Full Edition** (0.4.x) runs on self-hosted
-n8n only. The **Cloud Edition** (0.5.0 and later, this repository) is built to
-be allowed on n8n Cloud.
+The Cloud Edition is built to meet n8n Cloud's rules for community nodes, so the
+same package runs on n8n Cloud and on self-hosted n8n.
 
-| | Full Edition (0.4.x) | Cloud Edition (0.5.0+) |
-|---|---|---|
-| **Where it runs** | Self-hosted n8n only | n8n Cloud and self-hosted n8n |
-| **What it watches** | The agent, plus everything underneath it | Only the agent's own steps |
-| **The user's message** | Checked | Checked |
-| **Each model call** | Question, answer, model, tokens, plus the raw web request to the AI provider | Question, answer, model and tokens |
-| **Each tool call** | Input and output, plus the web calls and database queries inside the tool | Input and output |
-| **Database queries** | Each one recorded, and blockable on its own | Not seen |
-| **File reads and writes** | Can be recorded (off by default) | Not seen |
-| **Stopping something** | Before a step, or in the middle of a tool | Before a step starts, or after it finishes |
-| **Human approval** | Yes | Yes |
-| **PII redaction** | Yes | Yes |
-| **Other workflows on the same n8n** | Affected: it patches shared parts of the n8n process | Not affected |
-| **Extra settings** | Switches for HTTP, databases and files | None |
-| **Calls to OpenBox** | One per web request or query, on top of the agent's steps | One per agent step |
+| | Cloud Edition |
+|---|---|
+| **Where it runs** | n8n Cloud and self-hosted n8n |
+| **What it watches** | The agent's own steps: the run, the prompt, model calls, tool calls, memory |
+| **Each model call** | Question, answer, model and token counts |
+| **Each tool call** | What goes in and what comes out |
+| **Stopping something** | Before a step starts, or after it finishes |
+| **Human approval** | Yes |
+| **PII redaction** | Yes |
+| **Other workflows on the same n8n** | Not affected |
+| **Calls to OpenBox** | One per agent step |
 
-The Full Edition sees more, but reaches into the whole n8n process to do it.
-The Cloud Edition doesn't patch `fetch`, `http`/`https`, `fs`, database drivers
-or Node's module loader, and doesn't read `process.env`.
+It stays inside its own node:
 
-Self-hosters who need the deeper view can stay on the Full Edition by pinning
-it: `n8n-nodes-openbox-hook@0.4.4`.
+- It does not patch `fetch`, `http`/`https`, `fs`, database drivers or Node's
+  module loader, and does not read `process.env`. A test checks this after a
+  full agent run.
+- It passes n8n's community-node lint in strict mode, unmodified
+  (`npx n8n-node cloud-support` reports ENABLED).
+- What a tool does internally (its web requests, database queries and file
+  operations) is not seen. Govern those through the tool's input and output, or
+  wrap the operation as its own tool so it gets its own check.
 
 ## Development
 

@@ -2,7 +2,7 @@
  * Cloud Edition contract: governance happens only through the node's own
  * lifecycle calls. Constructing the middleware and running every handler must
  * leave the process exactly as it found it — no patched globals, prototypes
- * or module loader (the reason n8n declined verification of the 0.4.x line).
+ * or module loader. n8n Cloud does not allow a node to change any of these.
  */
 import fs from 'node:fs';
 import http from 'node:http';
